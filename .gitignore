@@ -1,0 +1,10 @@
+# Secrets: never commit. Passwords live only in .env on the machine that runs the code.
+.env
+*.env
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+# Logs
+*.log
