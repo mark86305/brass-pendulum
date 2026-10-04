@@ -1,10 +1,10 @@
 # Brass Pendulum - apply schema, run tests, or reset to a clean schema.
 #
-#   .\apply_and_test.ps1 -Db "<connection string without password>" -Mode test
+#   .\apply_and_test.ps1 -Conn "<connection string without password>" -Mode test
 #       Applies G1-G4 to an EMPTY database, then runs the four test files.
 #       Expect: G1, G2, G3, G4 TESTS PASSED (27 + 33 + 62 + 23 = 145).
 #
-#   .\apply_and_test.ps1 -Db "<connection string without password>" -Mode reset
+#   .\apply_and_test.ps1 -Conn "<connection string without password>" -Mode reset
 #       DROPS the sgpt schema and everything in it, then applies G1-G4 only.
 #       Leaves 37 tables: 32 empty, 5 holding the schema's own starting rows.
 #
@@ -14,7 +14,7 @@
 # clock moving between statements, so files must not share one batch.
 
 param(
-    [Parameter(Mandatory = $true)][string]$Db,
+    [Parameter(Mandatory = $true)][string]$Conn,
     [Parameter(Mandatory = $true)][ValidateSet("test", "reset")][string]$Mode
 )
 
@@ -27,7 +27,7 @@ $psql = Get-ChildItem "C:\Program Files\PostgreSQL\*\bin\psql.exe" -ErrorAction 
         Sort-Object FullName -Descending | Select-Object -First 1
 if (-not $psql) { Write-Host "psql.exe not found under C:\Program Files\PostgreSQL" -ForegroundColor Red; exit 1 }
 
-if ($Db -notmatch "sslmode=") { $Db = if ($Db -match "\?") { "$Db&sslmode=require" } else { "$Db?sslmode=require" } }
+if ($Conn -notmatch "sslmode=") { $Conn = if ($Conn -match "\?") { "${Conn}&sslmode=require" } else { "${Conn}?sslmode=require" } }
 
 $schema = @(
     "SpecGPT_Schema-G1_D04_2026-09-12.sql",
@@ -48,7 +48,7 @@ $env:PGPASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
 
 function Invoke-Sql([string]$label, [string[]]$psqlArgs) {
     Write-Host "-- $label" -ForegroundColor Cyan
-    $out = & $psql.FullName -X -q -v ON_ERROR_STOP=1 -d $Db @psqlArgs 2>&1
+    $out = & $psql.FullName -X -q -v ON_ERROR_STOP=1 -d $Conn @psqlArgs 2>&1
     $code = $LASTEXITCODE
     $passed = $out | Select-String "TESTS PASSED"
     if ($passed) { Write-Host ("   " + $passed.Line.Trim()) -ForegroundColor Green }
@@ -60,7 +60,7 @@ function Invoke-Sql([string]$label, [string[]]$psqlArgs) {
 }
 
 try {
-    $existing = & $psql.FullName -X -q -t -A -d $Db -c "select count(*) from information_schema.schemata where schema_name='sgpt'" 2>&1
+    $existing = & $psql.FullName -X -q -t -A -d $Conn -c "select count(*) from information_schema.schemata where schema_name='sgpt'" 2>&1
     if ($LASTEXITCODE -ne 0) { throw "Could not connect: $existing" }
 
     if ($Mode -eq "test" -and "$existing".Trim() -ne "0") {
@@ -86,7 +86,7 @@ try {
              "union all select 'instrument: ' || count(*) from sgpt.instrument " +
              "union all select 'revision_parameter: ' || count(*) from sgpt.revision_parameter " +
              "union all select 'window_run: ' || count(*) from sgpt.window_run"
-        $check = & $psql.FullName -X -q -t -A -d $Db -c $q 2>&1
+        $check = & $psql.FullName -X -q -t -A -d $Conn -c $q 2>&1
         Write-Host "`nClean schema in place. Expected: tables 37, run_type_step 18, schedule_slot 6, system_state 1, instrument 13, revision_parameter 17, window_run 0" -ForegroundColor Green
         $check | ForEach-Object { Write-Host "   $_" }
     }
